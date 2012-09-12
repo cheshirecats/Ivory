@@ -18,17 +18,21 @@
 #include <signal.h>
 #include <string.h>
 
+int server = 0;
+
 #define echo(fmt, ...) do { if (DEBUG) printf(fmt, __VA_ARGS__); } while (0)
 #define out(str) do { printf(str); } while (0)
 #define die() my_exit(__LINE__)
 void my_exit(int line)
 {
   printf("\x1b[0;31m\nerror %d at line %d: %s\n\n\x1b[0m", errno, line, strerror(errno));
+  if (server > 0) close(server);
   exit(-1);
 }
 void user_exit(int s)
 {
   printf("\n\n");
+  if (server > 0) close(server);
   exit(s);
 }
 
