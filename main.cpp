@@ -37,10 +37,9 @@ void setnonblocking(int fd)
   if (fcntl(fd, F_SETFL, opt) < 0) die();
 }
 
-int listen_port(int port)
+void listen_port(int port)
 {
   struct sockaddr_in sin;
-  int server = 0;
   if ((server = socket(AF_INET, SOCK_STREAM, 0)) <= 0) die();
 
   memset(&sin, 0, sizeof(sockaddr_in));
@@ -49,7 +48,6 @@ int listen_port(int port)
   sin.sin_addr.s_addr = INADDR_ANY;
   if (bind(server, (sockaddr*) &sin, sizeof(sin)) != 0) die();
   if (listen(server, LISTEN_BUFFER) != 0) die();
-  return server;
 }
 
 void close_fd(int& ee, int& f)
@@ -103,28 +101,24 @@ void* loop_io(void* p)
           }
         }
         if (g == 0) {
-          if ((in[0] == 'G') && (in[1] == 'E') && (in[2] == 'T') && (in[3] == ' ') && (in[4] == '/') && (in[5] == ' ')) {
-            if (strstr(in, "Sec-WebSocket-Version: 13")) {
-              char* c = strstr(in, "Sec-WebSocket-Key: ");
-              if (c) {
-                c += 19;
-                *(c + 24) = 0;
-                ws_hash(c, fd_hash[f]);
-                g = 2;
-              } else {
-                g = -1;
-              }
-            } else {
-              g = 1;
-            }
+          if ((in[0] != 'G') || (in[1] != 'E') || (in[2] != 'T') || (in[3] != ' ') || (in[4] != '/')) goto _baad_req_;
+          if (strstr(in, "Sec-WebSocket-Version: 13")) {
+            char* c = strstr(in, "Sec-WebSocket-Key: "); if (!c) goto _baad_req_;
+            c += 19; *(c + 24) = 0; ws_hash(c, fd_hash[f]);
+            g = 2;
           } else {
-            g = -1;
+            if (in[5] == ' ') g = 1; else goto _baad_req_;
           }
           if (g > 0) {
             ev.data.fd = f;
             ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
             epoll_ctl(epoll[ee], EPOLL_CTL_MOD, f, &ev);
+            goto _good_req_;
           }
+_baad_req_:
+          g = -1;
+_good_req_:
+          g = g;
         }
         if (g <= 0) {
           echo("bad request \x1b[0;31mclose %d\n\x1b[0m", f);
@@ -185,7 +179,7 @@ int main()
     io_thread_index[i] = i;
     if (pthread_create(&io_thread[i], NULL, loop_io, &io_thread_index[i]) != 0) die();
   }
-  int server = listen_port(LISTEN_PORT);
+  listen_port(LISTEN_PORT);
   sockaddr_in sin;
   socklen_t sock_len = sizeof(sockaddr_in);
   int client = 0;
